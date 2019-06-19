@@ -1,6 +1,7 @@
 package main
 
 import (
+  "fmt"
   "os"
   "log"
   "strconv"
@@ -12,6 +13,7 @@ import (
   "bufio"
   "time"
   "sync"
+  "github.com/pkg/profile"
 )
 
 const Out = "out"
@@ -19,8 +21,17 @@ var tags = make(map[string]bool)
 var wg sync.WaitGroup
 
 func main() {
+  defer profile.Start().Stop()
+  f, err := os.OpenFile("text.log",
+	os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+  if err != nil {
+    log.Println(err)
+  }
+  defer f.Close()
+
+  logger := log.New(f, "prefix", log.LstdFlags)
   start := time.Now()
-  log.Printf("Start Time %s", start)
+  logger.Printf("Start Time %s", start)
   maxIdx := 10
   mode := int(0777)
   cwd := getCWD()
@@ -30,10 +41,10 @@ func main() {
     folderPath := filepath.Join(cwd, strconv.Itoa(i))
     if _, err := os.Stat(folderPath); err == nil {
       if os.IsNotExist(err) {
-        log.Printf("stat error [%v]\n", err)
+        logger.Printf("stat error [%v]\n", err)
         break
       }
-      log.Printf(folderPath+"\n")
+      logger.Printf(folderPath+"\n")
       wErr := filepath.Walk(folderPath, func(path string, info os.FileInfo, wErr error) error {
         if info.IsDir() {
           return nil
@@ -47,12 +58,12 @@ func main() {
         return nil
       })
       if wErr != nil {
-        log.Printf("walk error [%v]\n", wErr)
+        logger.Printf("walk error [%v]\n", wErr)
       }
     }
   }
   elapsed := time.Since(start)
-  log.Printf("Time taken %s", elapsed)
+  logger.Printf("Time taken %s", elapsed)
 }
 
 func getCWD() (_path string){
@@ -66,10 +77,10 @@ func getCWD() (_path string){
 
 func ProcessFile(_file string) {
   defer wg.Done()
-  log.Printf("---------------------------")
-  log.Printf("Memory Usage Pre-processing")
+  logger.Printf("---------------------------")
+  logger.Printf("Memory Usage Pre-processing")
   PrintMemUsage()
-  log.Printf("Now processing %s", _file)
+  logger.Printf("Now processing %s", _file)
   file, err := os.Open(_file)
   if err != nil {
       log.Fatal(err)
@@ -95,7 +106,7 @@ func ProcessFile(_file string) {
       if prevTag != "" {
         _tagFileName := filepath.Join(getCWD(), "out", prevTag+".csv")
         AppendOrCreateFile(_tagFileName, dataToWrite)
-        log.Printf("Tag [%s] has [%d] records", prevTag, lineForThisTag)
+        logger.Printf("Tag [%s] has [%d] records", prevTag, lineForThisTag)
         extractedLines += lineForThisTag
       }
       dataToWrite = line
@@ -109,7 +120,7 @@ func ProcessFile(_file string) {
   }
 
   _tagFileName := filepath.Join(getCWD(), "out", prevTag+".csv")
-  log.Printf("Tag [%s] has [%d] records", prevTag, lineForThisTag)
+  logger.Printf("Tag [%s] has [%d] records", prevTag, lineForThisTag)
   extractedLines += lineForThisTag
   if(!Exists(_tagFileName)) {
     _err := ioutil.WriteFile(_tagFileName, []byte(dataToWrite), 0777)
@@ -119,12 +130,12 @@ func ProcessFile(_file string) {
   } else {
     AppendOrCreateFile(_tagFileName, dataToWrite)
   }
-  log.Printf("Total records : %d", totalLines)
-  log.Printf("Extracted records : %d", extractedLines)
-  log.Printf("Processing DONE \n")
-  log.Printf("Memory Usage Post-processing")
+  logger.Printf("Total records : %d", totalLines)
+  logger.Printf("Extracted records : %d", extractedLines)
+  logger.Printf("Processing DONE \n")
+  logger.Printf("Memory Usage Post-processing")
   PrintMemUsage()
-  log.Printf("---------------------------")
+  logger.Printf("---------------------------")
   runtime.GC()
 }
 
@@ -140,23 +151,23 @@ func Exists(name string) bool {
 func AppendOrCreateFile(fileName string, line string) {     
   file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
   if err != nil {
-    log.Fatalf("failed opening file: %s", err)
+    logger.Fatalf("failed opening file: %s", err)
   }
   defer file.Close()
 
   _, err = file.WriteString(line)
   if err != nil {
-      log.Fatalf("failed writing to file: %s", err)
+    logger.Fatalf("failed writing to file: %s", err)
   }
 }
 
 func PrintMemUsage() {
   var m runtime.MemStats
   runtime.ReadMemStats(&m)
-  log.Printf("Alloc = %v MiB", bToMb(m.Alloc))
-  log.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
-  log.Printf("\tSys = %v MiB", bToMb(m.Sys))
-  log.Printf("\tNumGC = %v\n", m.NumGC)
+  logger.Printf("Alloc = %v MiB", bToMb(m.Alloc))
+  logger.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
+  logger.Printf("\tSys = %v MiB", bToMb(m.Sys))
+  logger.Printf("\tNumGC = %v\n", m.NumGC)
 }
 
 func bToMb(b uint64) uint64 {
